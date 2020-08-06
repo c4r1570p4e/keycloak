@@ -34,19 +34,7 @@ import org.keycloak.testsuite.arquillian.annotation.DisableFeature;
 import org.keycloak.testsuite.arquillian.annotation.UncaughtServerErrorExpected;
 import org.keycloak.testsuite.auth.page.login.UpdateAccount;
 import org.keycloak.testsuite.pages.LoginPage;
-import org.keycloak.testsuite.pages.social.AbstractSocialLoginPage;
-import org.keycloak.testsuite.pages.social.BitbucketLoginPage;
-import org.keycloak.testsuite.pages.social.FacebookLoginPage;
-import org.keycloak.testsuite.pages.social.GitHubLoginPage;
-import org.keycloak.testsuite.pages.social.GitLabLoginPage;
-import org.keycloak.testsuite.pages.social.GoogleLoginPage;
-import org.keycloak.testsuite.pages.social.InstagramLoginPage;
-import org.keycloak.testsuite.pages.social.LinkedInLoginPage;
-import org.keycloak.testsuite.pages.social.MicrosoftLoginPage;
-import org.keycloak.testsuite.pages.social.OpenShiftLoginPage;
-import org.keycloak.testsuite.pages.social.PayPalLoginPage;
-import org.keycloak.testsuite.pages.social.StackOverflowLoginPage;
-import org.keycloak.testsuite.pages.social.TwitterLoginPage;
+import org.keycloak.testsuite.pages.social.*;
 import org.keycloak.testsuite.util.IdentityProviderBuilder;
 import org.keycloak.testsuite.util.OAuthClient;
 import org.keycloak.testsuite.util.RealmBuilder;
@@ -91,6 +79,7 @@ import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.OPENSHIFT4;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.PAYPAL;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.STACKOVERFLOW;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.TWITTER;
+import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.APPLE;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -131,7 +120,8 @@ public class SocialLoginTest extends AbstractKeycloakTest {
         OPENSHIFT4("openshift-v4", OpenShiftLoginPage.class),
         GITLAB("gitlab", GitLabLoginPage.class),
         BITBUCKET("bitbucket", BitbucketLoginPage.class),
-        INSTAGRAM("instagram", InstagramLoginPage.class);
+        INSTAGRAM("instagram", InstagramLoginPage.class),
+        APPLE("apple", AppleLoginPage.class);
 
         private String id;
         private Class<? extends AbstractSocialLoginPage> pageObjectClazz;
