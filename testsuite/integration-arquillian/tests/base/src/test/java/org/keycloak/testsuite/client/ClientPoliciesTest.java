@@ -58,6 +58,7 @@ import org.keycloak.events.EventType;
 import org.keycloak.jose.jws.Algorithm;
 import org.keycloak.models.AdminRoles;
 import org.keycloak.models.Constants;
+import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.protocol.oidc.OIDCAdvancedConfigWrapper;
 import org.keycloak.protocol.oidc.OIDCConfigAttributes;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
@@ -72,6 +73,7 @@ import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.representations.oidc.OIDCClientRepresentation;
 import org.keycloak.representations.oidc.TokenMetadataRepresentation;
+import org.keycloak.services.clientpolicy.ClientPolicyEvent;
 import org.keycloak.services.clientpolicy.ClientPolicyException;
 import org.keycloak.services.clientpolicy.DefaultClientPolicyProviderFactory;
 import org.keycloak.services.clientpolicy.condition.AnyClientConditionFactory;
@@ -99,6 +101,7 @@ import org.keycloak.testsuite.arquillian.annotation.AuthServerContainerExclude.A
 import org.keycloak.testsuite.client.resources.TestApplicationResourceUrls;
 import org.keycloak.testsuite.rest.resource.TestingOIDCEndpointsApplicationResource.AuthorizationEndpointRequestObject;
 import org.keycloak.testsuite.services.clientpolicy.condition.TestRaiseExeptionConditionFactory;
+import org.keycloak.testsuite.services.clientpolicy.executor.TestRaiseExeptionExecutorFactory;
 import org.keycloak.testsuite.util.MutualTLSUtils;
 import org.keycloak.testsuite.util.OAuthClient;
 
@@ -160,8 +163,8 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
                 clientRep.setClientAuthenticatorType(ClientIdAndSecretAuthenticator.PROVIDER_ID);
             });
             fail();
-        } catch (ClientPolicyException e) {
-            assertEquals(Errors.INVALID_REGISTRATION, e.getMessage());
+        } catch (ClientPolicyException cpe) {
+            assertEquals(OAuthErrorException.INVALID_CLIENT_METADATA, cpe.getError());
         }
     }
 
@@ -180,8 +183,8 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
         try {
             createClientByAdmin(generateSuffixedName(CLIENT_NAME), (ClientRepresentation clientRep) -> {});
             fail();
-        } catch (ClientPolicyException e) {
-            assertEquals(Errors.INVALID_REGISTRATION, e.getMessage());
+        } catch (ClientPolicyException cpe) {
+            assertEquals(OAuthErrorException.INVALID_CLIENT_METADATA, cpe.getError());
         }
     }
 
@@ -197,8 +200,8 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
                 clientRep.setClientAuthenticatorType(ClientIdAndSecretAuthenticator.PROVIDER_ID);
             });
             fail();
-        } catch (BadRequestException bre) {
-            assertEquals("HTTP 400 Bad Request", bre.getMessage());
+        } catch (ClientPolicyException cpe) {
+            assertEquals(OAuthErrorException.INVALID_CLIENT_METADATA, cpe.getError());
         }
         assertEquals(JWTClientSecretAuthenticator.PROVIDER_ID, getClientByAdmin(cId).getClientAuthenticatorType());
     }
@@ -506,8 +509,8 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
         try {
             createClientByAdmin(generateSuffixedName(CLIENT_NAME), (ClientRepresentation clientRep) -> {});
             fail();
-        } catch (ClientPolicyException e) {
-            assertEquals(Errors.INVALID_REGISTRATION, e.getMessage());
+        } catch (ClientPolicyException cpe) {
+            assertEquals(OAuthErrorException.SERVER_ERROR, cpe.getError());
         }
     }
 
@@ -630,8 +633,8 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
                 clientRep.setSecret(clientSecret);
             });
             fail();
-        } catch (ClientPolicyException e) {
-            assertEquals(Errors.INVALID_REGISTRATION, e.getMessage());
+        } catch (ClientPolicyException cpe) {
+            assertEquals(OAuthErrorException.INVALID_CLIENT_METADATA, cpe.getError());
         }
 
         updateCondition(conditionName, (ComponentRepresentation provider) -> {
@@ -757,7 +760,6 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
             fail();
         }
     }
-
 
     @Test
     public void testClientAccessTypeCondition() throws ClientRegistrationException, ClientPolicyException {
@@ -1043,8 +1045,8 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
                     clientRep.getAttributes().put(OIDCConfigAttributes.USER_INFO_RESPONSE_SIGNATURE_ALG, Algorithm.none.name());
             });
             fail();
-        } catch (ClientPolicyException e) {
-            assertEquals(Errors.INVALID_REGISTRATION, e.getMessage());
+        } catch (ClientPolicyException cpe) {
+            assertEquals(OAuthErrorException.INVALID_REQUEST, cpe.getError());
         }
 
         // create by Admin REST API - success
@@ -1061,32 +1063,32 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
         try {
             updateClientByAdmin(cAppAdminId, (ClientRepresentation clientRep) -> {
                 clientRep.setAttributes(new HashMap<>());
-                clientRep.getAttributes().put(OIDCConfigAttributes.ACCESS_TOKEN_SIGNED_RESPONSE_ALG, Algorithm.RS512.name());
+                clientRep.getAttributes().put(OIDCConfigAttributes.ACCESS_TOKEN_SIGNED_RESPONSE_ALG, org.keycloak.crypto.Algorithm.RS512);
             });
-        } catch (BadRequestException bre) {
-            assertEquals("HTTP 400 Bad Request", bre.getMessage());
+        } catch (ClientPolicyException cpe) {
+            assertEquals(Errors.INVALID_REQUEST, cpe.getError());
         }
         ClientRepresentation cRep = getClientByAdmin(cAppAdminId);
-        assertEquals(Algorithm.ES256.name(), cRep.getAttributes().get(OIDCConfigAttributes.ACCESS_TOKEN_SIGNED_RESPONSE_ALG));
+        assertEquals(org.keycloak.crypto.Algorithm.ES256, cRep.getAttributes().get(OIDCConfigAttributes.ACCESS_TOKEN_SIGNED_RESPONSE_ALG));
 
         // update by Admin REST API - success
         updateClientByAdmin(cAppAdminId, (ClientRepresentation clientRep) -> {
                 clientRep.setAttributes(new HashMap<>());
-                clientRep.getAttributes().put(OIDCConfigAttributes.ACCESS_TOKEN_SIGNED_RESPONSE_ALG, Algorithm.PS384.name());
+                clientRep.getAttributes().put(OIDCConfigAttributes.ACCESS_TOKEN_SIGNED_RESPONSE_ALG, org.keycloak.crypto.Algorithm.PS384);
         });
         cRep = getClientByAdmin(cAppAdminId);
-        assertEquals(Algorithm.PS384.name(), cRep.getAttributes().get(OIDCConfigAttributes.ACCESS_TOKEN_SIGNED_RESPONSE_ALG));
+        assertEquals(org.keycloak.crypto.Algorithm.PS384, cRep.getAttributes().get(OIDCConfigAttributes.ACCESS_TOKEN_SIGNED_RESPONSE_ALG));
 
         // create dynamically - fail
         try {
             createClientByAdmin(generateSuffixedName("App-in-Dynamic"), (ClientRepresentation clientRep) -> {
                     clientRep.setSecret("secret");
                     clientRep.setAttributes(new HashMap<>());
-                    clientRep.getAttributes().put(OIDCConfigAttributes.USER_INFO_RESPONSE_SIGNATURE_ALG, Algorithm.RS384.name());
+                    clientRep.getAttributes().put(OIDCConfigAttributes.USER_INFO_RESPONSE_SIGNATURE_ALG, org.keycloak.crypto.Algorithm.RS384);
                 });
             fail();
-        } catch (ClientPolicyException e) {
-            assertEquals(Errors.INVALID_REGISTRATION, e.getMessage());
+        } catch (ClientPolicyException cpe) {
+            assertEquals(OAuthErrorException.INVALID_REQUEST, cpe.getError());
         }
 
         // create dynamically - success
@@ -1102,7 +1104,7 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
         // update dynamically - fail
         try {
             updateClientDynamically(cAppDynamicClientId, (OIDCClientRepresentation clientRep) -> {
-                     clientRep.setIdTokenSignedResponseAlg(Algorithm.RS256.name());
+                     clientRep.setIdTokenSignedResponseAlg(org.keycloak.crypto.Algorithm.RS256);
                  });
             fail();
         } catch (ClientRegistrationException e) {
@@ -1279,6 +1281,80 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
         }
     }
 
+
+    @Test
+    public void testExtendedClientPolicyIntefacesForClientRegistrationPolicyMigration() throws ClientRegistrationException, ClientPolicyException {
+        String policyName = "MyPolicy";
+        String clientName = "ByAdmin-App" + KeycloakModelUtils.generateId().substring(0, 7);
+        String executorName = "TestRaiseExeptionExecutor";
+
+        createPolicy(policyName, DefaultClientPolicyProviderFactory.PROVIDER_ID, null, null, null);
+        logger.info("... Created Policy : " + policyName);
+
+        createCondition("AnyClientConditionFactory", AnyClientConditionFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
+        });
+        registerCondition("AnyClientConditionFactory", policyName);
+        logger.info("... Registered Condition : AnyClientConditionFactory");
+
+        createExecutor(executorName, TestRaiseExeptionExecutorFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
+            provider.getConfig().put(TestRaiseExeptionExecutorFactory.TARGET_CP_EVENTS, new ArrayList<>(Arrays.asList(ClientPolicyEvent.REGISTERED.toString())));
+        });
+        registerExecutor(executorName, policyName);
+        logger.info("... Registered Executor : " + executorName);
+
+        String clientId = null;
+        try {
+            try {
+                createClientByAdmin(clientName, (ClientRepresentation clientRep) -> {
+                });
+                fail();
+            } catch (ClientPolicyException cpe) {
+                assertEquals(ClientPolicyEvent.REGISTERED.toString(), cpe.getError());
+            }
+
+            updateExecutor(executorName, (ComponentRepresentation provider) -> {
+                provider.getConfig().put(TestRaiseExeptionExecutorFactory.TARGET_CP_EVENTS, new ArrayList<>(Arrays.asList(ClientPolicyEvent.UPDATED.toString())));
+            });
+
+            clientId = getClientByAdminWithName(clientName).getId();
+            assertEquals(true, getClientByAdmin(clientId).isEnabled());
+            try {
+                updateClientByAdmin(clientId, (ClientRepresentation clientRep) -> {
+                    clientRep.setEnabled(false);
+                });
+                fail();
+            } catch (ClientPolicyException cpe) {
+                assertEquals(ClientPolicyEvent.UPDATED.toString(), cpe.getError());
+            }
+            assertEquals(false, getClientByAdmin(clientId).isEnabled());
+
+            updateExecutor(executorName, (ComponentRepresentation provider) -> {
+                provider.getConfig().put(TestRaiseExeptionExecutorFactory.TARGET_CP_EVENTS, new ArrayList<>(Arrays.asList(ClientPolicyEvent.VIEW.toString())));
+            });
+            try {
+                getClientByAdmin(clientId);
+            } catch (ClientPolicyException cpe) {
+                assertEquals(ClientPolicyEvent.VIEW.toString(), cpe.getError());
+            }
+
+            updateExecutor(executorName, (ComponentRepresentation provider) -> {
+                provider.getConfig().put(TestRaiseExeptionExecutorFactory.TARGET_CP_EVENTS, new ArrayList<>(Arrays.asList(ClientPolicyEvent.UNREGISTER.toString())));
+            });
+            try {
+                deleteClientByAdmin(clientId);
+            } catch (ClientPolicyException cpe) {
+                assertEquals(ClientPolicyEvent.UNREGISTER.toString(), cpe.getError());
+            }
+        } finally {
+            updateExecutor(executorName, (ComponentRepresentation provider) -> {
+                provider.getConfig().put(TestRaiseExeptionExecutorFactory.TARGET_CP_EVENTS, new ArrayList<>());
+            });
+            deleteClientByAdmin(clientId);
+        }
+
+        // TODO : For dynamic client registration, the existing test scheme can not distinguish when the exception happens on which event so that the migrated client policy executors test them afterwards.
+    }
+
     private void checkMtlsFlow() throws IOException {
         // Check login.
         OAuthClient.AuthorizationEndpointResponse loginResponse = oauth.doLogin(TEST_USER_NAME, TEST_USER_PASSWORD);
@@ -1400,18 +1476,20 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
         createPolicy(policyName, DefaultClientPolicyProviderFactory.PROVIDER_ID, null, null, null);
         logger.info("... Created Policy : " + policyName);
 
-        createCondition(ClientUpdateContextCondition_NAME, ClientUpdateContextConditionFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
+        String conditionName = ClientUpdateContextCondition_NAME;
+        createCondition(conditionName, ClientUpdateContextConditionFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
             setConditionRegistrationMethods(provider, new ArrayList<>(Arrays.asList(ClientUpdateContextConditionFactory.BY_AUTHENTICATED_USER)));
         });
-        registerCondition(ClientUpdateContextCondition_NAME, policyName);
-        logger.info("... Registered Condition : " + ClientUpdateContextCondition_NAME);
+        registerCondition(conditionName, policyName);
+        logger.info("... Registered Condition : " + conditionName);
 
-        createExecutor(SecureClientAuthEnforceExecutor_NAME, SecureClientAuthEnforceExecutorFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
+        String executorName = SecureClientAuthEnforceExecutor_NAME;
+        createExecutor(executorName, SecureClientAuthEnforceExecutorFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
             setExecutorAcceptedClientAuthMethods(provider, new ArrayList<>(Arrays.asList(
                     JWTClientAuthenticator.PROVIDER_ID, JWTClientSecretAuthenticator.PROVIDER_ID, X509ClientAuthenticator.PROVIDER_ID)));
         });
-        registerExecutor(SecureClientAuthEnforceExecutor_NAME, policyName);
-        logger.info("... Registered Executor : " + SecureClientAuthEnforceExecutor_NAME);
+        registerExecutor(executorName, policyName);
+        logger.info("... Registered Executor : " + executorName);
 
     }
 
@@ -1420,31 +1498,35 @@ public class ClientPoliciesTest extends AbstractClientPoliciesTest {
         createPolicy(policyName, DefaultClientPolicyProviderFactory.PROVIDER_ID, null, null, null);
         logger.info("... Created Policy : " + policyName);
 
-        createCondition(ClientUpdateContextCondition_NAME, ClientUpdateContextConditionFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
+        String conditionName = ClientUpdateContextCondition_NAME;
+        createCondition(conditionName, ClientUpdateContextConditionFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
             setConditionRegistrationMethods(provider, new ArrayList<>(Arrays.asList(ClientUpdateContextConditionFactory.BY_INITIAL_ACCESS_TOKEN)));
         });
-        registerCondition(ClientUpdateContextCondition_NAME, policyName);
-        logger.info("... Registered Condition : " + ClientUpdateContextCondition_NAME);
+        registerCondition(conditionName, policyName);
+        logger.info("... Registered Condition : " + conditionName);
 
-        createCondition(ClientRolesCondition_NAME, ClientRolesConditionFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
+        conditionName = ClientRolesCondition_NAME;
+        createCondition(conditionName, ClientRolesConditionFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
             setConditionClientRoles(provider, new ArrayList<>(Arrays.asList(SAMPLE_CLIENT_ROLE)));
         });
-        registerCondition(ClientRolesCondition_NAME, policyName);
-        logger.info("... Registered Condition : " + ClientRolesCondition_NAME);
+        registerCondition(conditionName, policyName);
+        logger.info("... Registered Condition : " + conditionName);
 
-        createExecutor(SecureClientAuthEnforceExecutor_NAME, SecureClientAuthEnforceExecutorFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
+        String executorName = SecureClientAuthEnforceExecutor_NAME;
+        createExecutor(executorName, SecureClientAuthEnforceExecutorFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
             setExecutorAcceptedClientAuthMethods(provider, new ArrayList<>(Arrays.asList(ClientIdAndSecretAuthenticator.PROVIDER_ID, JWTClientAuthenticator.PROVIDER_ID)));
             setExecutorAugmentedClientAuthMethod(provider, ClientIdAndSecretAuthenticator.PROVIDER_ID);
             setExecutorAugmentActivate(provider);
         });
-        registerExecutor(SecureClientAuthEnforceExecutor_NAME, policyName);
-        logger.info("... Registered Executor : " + SecureClientAuthEnforceExecutor_NAME);
+        registerExecutor(executorName, policyName);
+        logger.info("... Registered Executor : " + executorName);
 
-        createExecutor(PKCEEnforceExecutor_NAME, PKCEEnforceExecutorFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
+        executorName = PKCEEnforceExecutor_NAME;
+        createExecutor(executorName, PKCEEnforceExecutorFactory.PROVIDER_ID, null, (ComponentRepresentation provider) -> {
             setExecutorAugmentActivate(provider);
         });
-        registerExecutor(PKCEEnforceExecutor_NAME, policyName);
-        logger.info("... Registered Executor : " + PKCEEnforceExecutor_NAME);
+        registerExecutor(executorName, policyName);
+        logger.info("... Registered Executor : " + executorName);
     }
 
     private void successfulLoginAndLogout(String clientId, String clientSecret) {

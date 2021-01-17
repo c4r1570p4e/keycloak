@@ -15,26 +15,28 @@
  * limitations under the License.
  */
 
-package org.keycloak.services.clientpolicy;
+package org.keycloak.services.clientpolicy.context;
+
+import javax.ws.rs.core.MultivaluedMap;
 
 import org.keycloak.services.clientpolicy.ClientPolicyContext;
 import org.keycloak.services.clientpolicy.ClientPolicyEvent;
 
-public class UserInfoRequestContext implements ClientPolicyContext {
+public class TokenIntrospectContext implements ClientPolicyContext {
 
-    private final String tokenString;
+    private final MultivaluedMap<String, String> params;
 
-    public UserInfoRequestContext(String tokenString) {
-        this.tokenString = tokenString;
+    public TokenIntrospectContext(MultivaluedMap<String, String> params) {
+        this.params = params;
     }
 
     @Override
     public ClientPolicyEvent getEvent() {
-        return ClientPolicyEvent.USERINFO_REQUEST;
+        return ClientPolicyEvent.TOKEN_INTROSPECT;
     }
 
-    public String getTokenString() {
-        return tokenString;
+    public MultivaluedMap<String, String> getParams() {
+        return params;
     }
 
 }

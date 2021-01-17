@@ -28,6 +28,10 @@ import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.RefreshToken;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.services.clientpolicy.*;
+import org.keycloak.services.clientpolicy.context.LogoutRequestContext;
+import org.keycloak.services.clientpolicy.context.TokenRefreshContext;
+import org.keycloak.services.clientpolicy.context.TokenRevokeContext;
+import org.keycloak.services.clientpolicy.context.UserInfoRequestContext;
 import org.keycloak.services.util.MtlsHoKTokenUtil;
 
 import javax.ws.rs.core.MultivaluedMap;
