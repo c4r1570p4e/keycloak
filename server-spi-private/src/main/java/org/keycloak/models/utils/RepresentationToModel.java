@@ -1556,6 +1556,7 @@ public class RepresentationToModel {
                 }
             }
         }
+
         if (rep.getNotBefore() != null) {
             resource.setNotBefore(rep.getNotBefore());
         }

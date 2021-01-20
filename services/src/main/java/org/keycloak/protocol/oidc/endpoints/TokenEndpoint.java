@@ -1394,24 +1394,24 @@ public class TokenEndpoint {
             throw new CorsErrorResponseException(cors, OAuthErrorException.INVALID_GRANT, "Device code not valid", Response.Status.BAD_REQUEST);
         }
 
-        if (!store.isPollingAllowed(deviceCodeModel)) {
-            event.error(Errors.SLOW_DOWN);
-            throw new CorsErrorResponseException(cors, OAuthErrorException.SLOW_DOWN, "Slow down", Response.Status.BAD_REQUEST);
-        }
-
         int expiresIn = deviceCodeModel.getExpiration() - Time.currentTime();
         if (expiresIn < 0) {
             event.error(Errors.EXPIRED_OAUTH2_DEVICE_CODE);
             throw new CorsErrorResponseException(cors, OAuthErrorException.EXPIRED_TOKEN, "Device code is expired", Response.Status.BAD_REQUEST);
         }
 
-        if (deviceCodeModel.isPending()) {
-            throw new CorsErrorResponseException(cors, OAuthErrorException.AUTHORIZATION_PENDING, "The authorization request is still pending", Response.Status.BAD_REQUEST);
+        if (!store.isPollingAllowed(deviceCodeModel)) {
+            event.error(Errors.SLOW_DOWN);
+            throw new CorsErrorResponseException(cors, OAuthErrorException.SLOW_DOWN, "Slow down", Response.Status.BAD_REQUEST);
         }
 
         if (deviceCodeModel.isDenied()) {
             event.error(Errors.ACCESS_DENIED);
             throw new CorsErrorResponseException(cors, OAuthErrorException.ACCESS_DENIED, "The end user denied the authorization request", Response.Status.BAD_REQUEST);
+        }
+
+        if (deviceCodeModel.isPending()) {
+            throw new CorsErrorResponseException(cors, OAuthErrorException.AUTHORIZATION_PENDING, "The authorization request is still pending", Response.Status.BAD_REQUEST);
         }
 
         // Approved

@@ -20,7 +20,6 @@ import org.keycloak.common.util.Time;
 
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -50,10 +49,9 @@ public class OAuth2DeviceCodeModel {
     private final Map<String, String> additionalParams;
 
     public static OAuth2DeviceCodeModel create(RealmModel realm, ClientModel client,
-                                               String deviceCode, String scope, String nonce, Map<String, String> additionalParams) {
-        int expiresIn = realm.getOAuth2DeviceCodeLifespan();
+                                               String deviceCode, String scope, String nonce, int expiresIn, int pollingInterval, Map<String, String> additionalParams) {
+        
         int expiration = Time.currentTime() + expiresIn;
-        int pollingInterval = realm.getOAuth2DevicePollingInterval();
         return new OAuth2DeviceCodeModel(realm, client.getClientId(), deviceCode, scope, nonce, expiration, pollingInterval,  null, false, additionalParams);
     }
 
@@ -128,12 +126,8 @@ public class OAuth2DeviceCodeModel {
         return userSessionId == null;
     }
 
-    public boolean isApproved() {
-        return userSessionId != null && !denied;
-    }
-
     public boolean isDenied() {
-        return userSessionId != null && denied;
+        return denied;
     }
 
     public String getUserSessionId() {

@@ -39,6 +39,7 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.models.utils.SystemClientUtil;
 import org.keycloak.protocol.AuthorizationEndpointBase;
+import org.keycloak.protocol.oidc.OIDCConfigAttributes;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.protocol.oidc.endpoints.request.AuthorizationEndpointRequest;
 import org.keycloak.protocol.oidc.endpoints.request.AuthorizationEndpointRequestParserProcessor;
@@ -129,11 +130,23 @@ public class OAuth2DeviceAuthorizationEndpoint extends AuthorizationEndpointBase
             throw new CorsErrorResponseException(cors, OAuthErrorException.INVALID_GRANT, "Client not allowed for OAuth 2.0 Device Authorization Grant", Response.Status.BAD_REQUEST);
         }
 
-        int expiresIn = realm.getOAuth2DeviceCodeLifespan();
-        int interval = realm.getOAuth2DevicePollingInterval();
+        int expiresIn;
+        String expiresInPerClient = client.getAttribute(OIDCConfigAttributes.OAUTH2_DEVICE_CODE_LIFESPAN);
+        if (expiresInPerClient != null && !expiresInPerClient.trim().isEmpty()) {
+            expiresIn = Integer.parseInt(expiresInPerClient);
+        } else {
+            expiresIn = realm.getOAuth2DeviceCodeLifespan();
+        }
+        int interval;
+        String intervalPerClient = client.getAttribute(OIDCConfigAttributes.OAUTH2_DEVICE_POLLING_INTERVAL);
+        if (intervalPerClient != null && !intervalPerClient.trim().isEmpty()) {
+            interval = Integer.parseInt(intervalPerClient);
+        } else {
+            interval = realm.getOAuth2DevicePollingInterval();
+        }
 
         OAuth2DeviceCodeModel deviceCode = OAuth2DeviceCodeModel.create(realm, client,
-                Base64Url.encode(KeycloakModelUtils.generateSecret()), request.getScope(), request.getNonce(), request.getAdditionalReqParams());
+                Base64Url.encode(KeycloakModelUtils.generateSecret()), request.getScope(), request.getNonce(), expiresIn, interval, request.getAdditionalReqParams());
 
         OAuth2DeviceUserCodeProvider userCodeProvider = session.getProvider(OAuth2DeviceUserCodeProvider.class);
         String secret = userCodeProvider.generate();
