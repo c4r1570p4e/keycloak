@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Red Hat, Inc. and/or its affiliates
+ * Copyright 2021 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
 
 import org.jboss.logging.Logger;
 import org.keycloak.OAuthErrorException;
-import org.keycloak.component.ComponentModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
@@ -40,26 +39,51 @@ import org.keycloak.services.clientpolicy.ClientUpdateContext;
 import org.keycloak.services.clientpolicy.DynamicClientRegisterContext;
 import org.keycloak.services.clientpolicy.DynamicClientUpdateContext;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 public class ClientUpdateSourceRolesCondition implements ClientPolicyConditionProvider {
 
     private static final Logger logger = Logger.getLogger(ClientUpdateSourceRolesCondition.class);
+    private static final String LOGMSG_PREFIX = "CLIENT-POLICY";
+    private String logMsgPrefix() {
+        return LOGMSG_PREFIX + "@" + session.hashCode() + " :: CONDITION";
+    }
 
     private final KeycloakSession session;
-    private final ComponentModel componentModel;
+    private Configuration configuration;
 
-    public ClientUpdateSourceRolesCondition(KeycloakSession session, ComponentModel componentModel) {
+    public ClientUpdateSourceRolesCondition(KeycloakSession session) {
         this.session = session;
-        this.componentModel = componentModel;
     }
 
     @Override
-    public String getName() {
-        return componentModel.getName();
+    public void setupConfiguration(Object config) {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            configuration = mapper.convertValue(config, Configuration.class);
+        } catch (IllegalArgumentException iae) {
+            ClientPolicyLogger.logv(logger, "{0} :: failed for Configuration Setup :: error = {1}", logMsgPrefix(), iae.getMessage());
+            return;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Configuration {
+        protected List<String> roles;
+
+        public List<String> getRoles() {
+            return roles;
+        }
+
+        public void setRoles(List<String> roles) {
+            this.roles = roles;
+        }
     }
 
     @Override
     public String getProviderId() {
-        return componentModel.getProviderId();
+        return ClientUpdateSourceRolesConditionFactory.PROVIDER_ID;
     }
 
     @Override
@@ -112,8 +136,8 @@ public class ClientUpdateSourceRolesCondition implements ClientPolicyConditionPr
         Set<String> roles = user.getRoleMappingsStream().map(RoleModel::getName).collect(Collectors.toSet());
 
         if (logger.isTraceEnabled()) {
-            roles.stream().forEach(i -> ClientPolicyLogger.log(logger, " user role = " + i));
-            expectedRoles.stream().forEach(i -> ClientPolicyLogger.log(logger, "roles expected = " + i));
+            roles.stream().forEach(i -> ClientPolicyLogger.logv(logger, "{0} :: user role = {1}", logMsgPrefix(), i));
+            expectedRoles.stream().forEach(i -> ClientPolicyLogger.logv(logger, "{0} :: roles expected = {1}", logMsgPrefix(), i));
         }
 
         RealmModel realm = session.getContext().getRealm();
@@ -128,18 +152,14 @@ public class ClientUpdateSourceRolesCondition implements ClientPolicyConditionPr
                 return false;
             });
         });
-        if (isMatched) {
-            ClientPolicyLogger.log(logger, "role matched.");
-        } else {
-            ClientPolicyLogger.log(logger, "role unmatched.");
-        }
+
         return isMatched;
     }
 
     private Set<String> instantiateRolesForMatching() {
-        if (componentModel.getConfig() == null) return null;
-        List<String> roles = componentModel.getConfig().get(ClientUpdateSourceRolesConditionFactory.ROLES);
+        List<String> roles = configuration.getRoles();
         if (roles == null) return null;
         return new HashSet<>(roles);
     }
+
 }

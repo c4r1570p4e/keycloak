@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Red Hat, Inc. and/or its affiliates
+ * Copyright 2021 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,36 +18,45 @@
 package org.keycloak.services.clientpolicy.condition;
 
 import org.jboss.logging.Logger;
-import org.keycloak.component.ComponentModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.services.clientpolicy.ClientPolicyContext;
 import org.keycloak.services.clientpolicy.ClientPolicyException;
 import org.keycloak.services.clientpolicy.ClientPolicyVote;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 public class AnyClientCondition implements ClientPolicyConditionProvider {
+
     private static final Logger logger = Logger.getLogger(AnyClientCondition.class);
+    private static final String LOGMSG_PREFIX = "CLIENT-POLICY";
+    private String logMsgPrefix() {
+        return LOGMSG_PREFIX + "@" + session.hashCode();
+    }
 
     private final KeycloakSession session;
-    private final ComponentModel componentModel;
+    private Configuration configuration;
 
-    public AnyClientCondition(KeycloakSession session, ComponentModel componentModel) {
+    public AnyClientCondition(KeycloakSession session) {
         this.session = session;
-        this.componentModel = componentModel;
+    }
+
+    @Override
+    public void setupConfiguration(Object config) {
+        // no setup configuration item
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Configuration {
+    }
+
+    @Override
+    public String getProviderId() {
+        return AnyClientConditionFactory.PROVIDER_ID;
     }
 
     @Override
     public ClientPolicyVote applyPolicy(ClientPolicyContext context) throws ClientPolicyException {
         return ClientPolicyVote.YES;
-    }
-
-    @Override
-    public String getName() {
-        return componentModel.getName();
-    }
-
-    @Override
-    public String getProviderId() {
-        return componentModel.getProviderId();
     }
 
 }

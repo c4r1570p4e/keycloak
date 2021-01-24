@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Red Hat, Inc. and/or its affiliates
+ * Copyright 2021 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,33 +24,69 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.jboss.logging.Logger;
-import org.keycloak.component.ComponentModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.services.clientpolicy.ClientPolicyContext;
 import org.keycloak.services.clientpolicy.ClientPolicyException;
 import org.keycloak.services.clientpolicy.ClientPolicyLogger;
 import org.keycloak.services.clientpolicy.ClientPolicyVote;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 public class ClientUpdateSourceHostsCondition implements ClientPolicyConditionProvider {
 
     private static final Logger logger = Logger.getLogger(ClientUpdateSourceHostsCondition.class);
+    private static final String LOGMSG_PREFIX = "CLIENT-POLICY";
+    private String logMsgPrefix() {
+        return LOGMSG_PREFIX + "@" + session.hashCode() + " :: CONDITION";
+    }
 
     private final KeycloakSession session;
-    private final ComponentModel componentModel;
+    private Configuration configuration;
 
-    public ClientUpdateSourceHostsCondition(KeycloakSession session, ComponentModel componentModel) {
+    public ClientUpdateSourceHostsCondition(KeycloakSession session) {
         this.session = session;
-        this.componentModel = componentModel;
     }
 
     @Override
-    public String getName() {
-        return componentModel.getName();
+    public void setupConfiguration(Object config) {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            configuration = mapper.convertValue(config, Configuration.class);
+        } catch (IllegalArgumentException iae) {
+            ClientPolicyLogger.logv(logger, "{0} :: failed for Configuration Setup :: error = {1}", logMsgPrefix(), iae.getMessage());
+            return;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Configuration {
+        @JsonProperty("trusted-hosts")
+        protected List<String> trustedHosts;
+        @JsonProperty("host-sending-request-must-match")
+        protected List<Boolean> hostSendingRequestMustMatch;
+
+        public List<String> getTrustedHosts() {
+            return trustedHosts;
+        }
+
+        public void setTrustedHosts(List<String> trustedHosts) {
+            this.trustedHosts = trustedHosts;
+        }
+
+        public List<Boolean> getHostSendingRequestMustMatch() {
+            return hostSendingRequestMustMatch;
+        }
+
+        public void setHostSendingRequestMustMatch(List<Boolean> hostSendingRequestMustMatch) {
+            this.hostSendingRequestMustMatch = hostSendingRequestMustMatch;
+        }
     }
 
     @Override
     public String getProviderId() {
-        return componentModel.getProviderId();
+        return ClientUpdateSourceHostsConditionFactory.PROVIDER_ID;
     }
 
     @Override
@@ -69,7 +105,7 @@ public class ClientUpdateSourceHostsCondition implements ClientPolicyConditionPr
     private boolean isHostMatched() {
         String hostAddress = session.getContext().getConnection().getRemoteAddr();
 
-        ClientPolicyLogger.logv(logger, "Verifying remote host {0}", hostAddress);
+        ClientPolicyLogger.logv(logger, "{0} :: Verifying remote host = {1}", logMsgPrefix(), hostAddress);
 
         List<String> trustedHosts = getTrustedHosts();
         List<String> trustedDomains = getTrustedDomains();
@@ -90,16 +126,14 @@ public class ClientUpdateSourceHostsCondition implements ClientPolicyConditionPr
     }
 
     protected List<String> getTrustedHosts() {
-        List<String> trustedHostsConfig = componentModel.getConfig().getList(ClientUpdateSourceHostsConditionFactory.TRUSTED_HOSTS);
+        List<String> trustedHostsConfig = configuration.getTrustedHosts();
         return trustedHostsConfig.stream().filter((String hostname) -> {
-
             return !hostname.startsWith("*.");
-
         }).collect(Collectors.toList());
     }
 
     protected List<String> getTrustedDomains() {
-        List<String> trustedHostsConfig = componentModel.getConfig().getList(ClientUpdateSourceHostsConditionFactory.TRUSTED_HOSTS);
+        List<String> trustedHostsConfig = configuration.getTrustedHosts();
         List<String> domains = new LinkedList<>();
 
         for (String hostname : trustedHostsConfig) {
@@ -117,13 +151,13 @@ public class ClientUpdateSourceHostsCondition implements ClientPolicyConditionPr
             try {
                 String hostIPAddress = InetAddress.getByName(confHostName).getHostAddress();
 
-                ClientPolicyLogger.logv(logger, "Trying host {0} of address {1}", confHostName, hostIPAddress);
+                ClientPolicyLogger.logv(logger, "{0} :: Trying host {1} of address {2}", logMsgPrefix(), confHostName, hostIPAddress);
                 if (hostIPAddress.equals(hostAddress)) {
-                    ClientPolicyLogger.logv(logger, "Successfully verified host : {0}", confHostName);
+                    ClientPolicyLogger.logv(logger, "{0} :: Successfully verified host = {1}", logMsgPrefix(), confHostName);
                     return confHostName;
                 }
             } catch (UnknownHostException uhe) {
-                ClientPolicyLogger.logv(logger, "Unknown host from realm configuration: {0}", confHostName);
+                ClientPolicyLogger.logv(logger, "{0} :: Unknown host from realm configuration = {1}", logMsgPrefix(), confHostName);
             }
         }
 
@@ -135,16 +169,16 @@ public class ClientUpdateSourceHostsCondition implements ClientPolicyConditionPr
             try {
                 String hostname = InetAddress.getByName(hostAddress).getHostName();
 
-                ClientPolicyLogger.logv(logger, "Trying verify request from address {0} of host {1} by domains", hostAddress, hostname);
+                ClientPolicyLogger.logv(logger, "{0} :: Trying verify request from address {1} of host {2} by domains", logMsgPrefix(), hostAddress, hostname);
 
                 for (String confDomain : trustedDomains) {
                     if (hostname.endsWith(confDomain)) {
-                        ClientPolicyLogger.logv(logger, "Successfully verified host {0} by trusted domain {1}", hostname, confDomain);
+                        ClientPolicyLogger.logv(logger, "{0} :: Successfully verified host {1} by trusted domain {2}", logMsgPrefix(), hostname, confDomain);
                         return hostname;
                     }
                 }
             } catch (UnknownHostException uhe) {
-                ClientPolicyLogger.logv(logger, "Request of address {0} came from unknown host. Skip verification by domains", hostAddress);
+                ClientPolicyLogger.logv(logger, "{0} :: Request of address {1} came from unknown host. Skip verification by domains", logMsgPrefix(), hostAddress);
             }
         }
 
@@ -152,13 +186,15 @@ public class ClientUpdateSourceHostsCondition implements ClientPolicyConditionPr
     }
 
     boolean isHostMustMatch() {
-        return parseBoolean(ClientUpdateSourceHostsConditionFactory.HOST_SENDING_REQUEST_MUST_MATCH);
+        List<Boolean> l = configuration.getHostSendingRequestMustMatch();
+        if (l != null && !l.isEmpty()) return l.get(0).booleanValue();
+        return true;
     }
 
     // True by default
-    private boolean parseBoolean(String propertyKey) {
-        String val = componentModel.getConfig().getFirst(propertyKey);
-        return val==null || Boolean.parseBoolean(val);
-    }
+    //private boolean parseBoolean(String propertyKey) {
+    //    String val = componentModel.getConfig().getFirst(propertyKey);
+    //    return val==null || Boolean.parseBoolean(val);
+    //}
 
 }

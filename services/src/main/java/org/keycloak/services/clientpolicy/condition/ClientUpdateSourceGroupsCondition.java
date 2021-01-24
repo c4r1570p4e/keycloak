@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Red Hat, Inc. and/or its affiliates
+ * Copyright 2021 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,6 @@
 
 package org.keycloak.services.clientpolicy.condition;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -25,8 +24,6 @@ import java.util.stream.Collectors;
 
 import org.jboss.logging.Logger;
 import org.keycloak.OAuthErrorException;
-import org.keycloak.common.util.MultivaluedHashMap;
-import org.keycloak.component.ComponentModel;
 import org.keycloak.models.GroupModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.UserModel;
@@ -41,26 +38,51 @@ import org.keycloak.services.clientpolicy.ClientUpdateContext;
 import org.keycloak.services.clientpolicy.DynamicClientRegisterContext;
 import org.keycloak.services.clientpolicy.DynamicClientUpdateContext;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 public class ClientUpdateSourceGroupsCondition implements ClientPolicyConditionProvider {
 
     private static final Logger logger = Logger.getLogger(ClientUpdateSourceGroupsCondition.class);
+    private static final String LOGMSG_PREFIX = "CLIENT-POLICY";
+    private String logMsgPrefix() {
+        return LOGMSG_PREFIX + "@" + session.hashCode() + " :: CONDITION";
+    }
 
     private final KeycloakSession session;
-    private final ComponentModel componentModel;
+    private Configuration configuration;
 
-    public ClientUpdateSourceGroupsCondition(KeycloakSession session, ComponentModel componentModel) {
+    public ClientUpdateSourceGroupsCondition(KeycloakSession session) {
         this.session = session;
-        this.componentModel = componentModel;
     }
 
     @Override
-    public String getName() {
-        return componentModel.getName();
+    public void setupConfiguration(Object config) {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            configuration = mapper.convertValue(config, Configuration.class);
+        } catch (IllegalArgumentException iae) {
+            ClientPolicyLogger.logv(logger, "{0} :: failed for Configuration Setup :: error = {1}", logMsgPrefix(), iae.getMessage());
+            return;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Configuration {
+        protected List<String> groups;
+
+        public List<String> getGroups() {
+            return groups;
+        }
+
+        public void setGroups(List<String> groups) {
+            this.groups = groups;
+        }
     }
 
     @Override
     public String getProviderId() {
-        return componentModel.getProviderId();
+        return ClientUpdateSourceGroupsConditionFactory.PROVIDER_ID;
     }
 
     @Override
@@ -113,23 +135,17 @@ public class ClientUpdateSourceGroupsCondition implements ClientPolicyConditionP
         Set<String> groups = user.getGroupsStream().map(GroupModel::getName).collect(Collectors.toSet());
 
         if (logger.isTraceEnabled()) {
-            groups.stream().forEach(i -> ClientPolicyLogger.log(logger, " user group = " + i));
-            expectedGroups.stream().forEach(i -> ClientPolicyLogger.log(logger, "groups expected = " + i));
+            groups.stream().forEach(i -> ClientPolicyLogger.logv(logger, "{0} :: user group = {1}", logMsgPrefix(), i));
+            expectedGroups.stream().forEach(i -> ClientPolicyLogger.logv(logger, "{0} :: expected user group = {1}", logMsgPrefix(), i));
         }
 
-        boolean isMatched = expectedGroups.removeAll(groups);
-        if (isMatched) {
-            ClientPolicyLogger.log(logger, "group matched.");
-        } else {
-            ClientPolicyLogger.log(logger, "group unmatched.");
-        }
-        return isMatched;
+        return expectedGroups.removeAll(groups);
     }
 
     private Set<String> instantiateGroupsForMatching() {
-        if (componentModel.getConfig() == null) return null;
-        List<String> roles = componentModel.getConfig().get(ClientUpdateSourceGroupsConditionFactory.GROUPS);
-        if (roles == null) return null;
-        return new HashSet<>(roles);
+        List<String> groups = configuration.getGroups();
+        if (groups == null) return null;
+        return new HashSet<>(groups);
     }
+
 }

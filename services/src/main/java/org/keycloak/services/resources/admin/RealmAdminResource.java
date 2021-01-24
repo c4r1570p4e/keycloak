@@ -1206,4 +1206,17 @@ public class RealmAdminResource {
                 .filter(providerId ->  session.getProvider(RequiredActionProvider.class, providerId) instanceof CredentialRegistrator);
     }
 
+    @Path("client-policies/policies")
+    public ClientPoliciesPoliciesResource getClientPoliciesPoliciesResource() {
+        ClientPoliciesPoliciesResource resource = new ClientPoliciesPoliciesResource(realm, auth);
+        ResteasyProviderFactory.getInstance().injectProperties(resource);
+        return resource;
+    }
+
+    @Path("client-policies/profiles")
+    public ClientPoliciesProfilesResource getClientPoliciesProfilesResource() {
+        ClientPoliciesProfilesResource resource = new ClientPoliciesProfilesResource(realm, auth);
+        ResteasyProviderFactory.getInstance().injectProperties(resource);
+        return resource;
+    }
 }

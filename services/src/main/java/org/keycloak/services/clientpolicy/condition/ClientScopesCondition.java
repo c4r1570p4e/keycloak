@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Red Hat, Inc. and/or its affiliates
+ * Copyright 2021 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,6 @@ import java.util.Set;
 
 import org.jboss.logging.Logger;
 import org.keycloak.OAuth2Constants;
-import org.keycloak.component.ComponentModel;
 import org.keycloak.models.AuthenticatedClientSessionModel;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.KeycloakSession;
@@ -37,16 +36,60 @@ import org.keycloak.services.clientpolicy.ClientPolicyLogger;
 import org.keycloak.services.clientpolicy.ClientPolicyVote;
 import org.keycloak.services.clientpolicy.TokenRequestContext;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 public class ClientScopesCondition implements ClientPolicyConditionProvider {
 
     private static final Logger logger = Logger.getLogger(ClientScopesCondition.class);
+    private static final String LOGMSG_PREFIX = "CLIENT-POLICY";
+    private String logMsgPrefix() {
+        return LOGMSG_PREFIX + "@" + session.hashCode() + " :: CONDITION";
+    }
 
     private final KeycloakSession session;
-    private final ComponentModel componentModel;
+    private Configuration configuration;
 
-    public ClientScopesCondition(KeycloakSession session, ComponentModel componentModel) {
+    public ClientScopesCondition(KeycloakSession session) {
         this.session = session;
-        this.componentModel = componentModel;
+    }
+
+    @Override
+    public void setupConfiguration(Object config) {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            configuration = mapper.convertValue(config, Configuration.class);
+        } catch (IllegalArgumentException iae) {
+            ClientPolicyLogger.logv(logger, "{0} :: failed for Configuration Setup :: error = {1}", logMsgPrefix(), iae.getMessage());
+            return;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Configuration {
+        protected String type;
+        protected List<String> scope;
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public List<String> getScope() {
+            return scope;
+        }
+
+        public void setScope(List<String> scope) {
+            this.scope = scope;
+        }
+    }
+
+    @Override
+    public String getProviderId() {
+        return ClientScopesConditionFactory.PROVIDER_ID;
     }
 
     @Override
@@ -61,16 +104,6 @@ public class ClientScopesCondition implements ClientPolicyConditionProvider {
             default:
                 return ClientPolicyVote.ABSTAIN;
         }
-    }
-
-    @Override
-    public String getName() {
-        return componentModel.getName();
-    }
-
-    @Override
-    public String getProviderId() {
-        return componentModel.getProviderId();
     }
 
     private boolean isScopeMatched(AuthenticatedClientSessionModel clientSession) {
@@ -92,13 +125,13 @@ public class ClientScopesCondition implements ClientPolicyConditionProvider {
         if (expectedScopes == null) expectedScopes = new HashSet<>();
 
         if (logger.isTraceEnabled()) {
-            explicitSpecifiedScopes.stream().forEach(i -> ClientPolicyLogger.log(logger, " explicit specified client scope = " + i));
-            defaultScopes.stream().forEach(i -> ClientPolicyLogger.log(logger, " default client scope = " + i));
-            optionalScopes.stream().forEach(i -> ClientPolicyLogger.log(logger, " optional client scope = " + i));
-            expectedScopes.stream().forEach(i -> ClientPolicyLogger.log(logger, " expected scope = " + i));
+            explicitSpecifiedScopes.stream().forEach(i -> ClientPolicyLogger.logv(logger, "{0} :: explicit specified client scope = {1}", logMsgPrefix(), i));
+            defaultScopes.stream().forEach(i -> ClientPolicyLogger.logv(logger, "{0} :: default client scope = {1}", logMsgPrefix(), i));
+            optionalScopes.stream().forEach(i -> ClientPolicyLogger.logv(logger, "{0} :: optional client scope = {1}", logMsgPrefix(), i));
+            expectedScopes.stream().forEach(i -> ClientPolicyLogger.logv(logger, "{0} :: expected scope = {1}", logMsgPrefix(), i));
         }
 
-        boolean isDefaultScope = ClientScopesConditionFactory.DEFAULT.equals(componentModel.getConfig().getFirst(ClientScopesConditionFactory.TYPE));
+        boolean isDefaultScope = ClientScopesConditionFactory.DEFAULT.equals(configuration.getType());
 
         if (isDefaultScope) {
             expectedScopes.retainAll(defaultScopes);
@@ -107,7 +140,9 @@ public class ClientScopesCondition implements ClientPolicyConditionProvider {
             explicitSpecifiedScopes.retainAll(expectedScopes);
             explicitSpecifiedScopes.retainAll(optionalScopes);
             if (!explicitSpecifiedScopes.isEmpty()) {
-                explicitSpecifiedScopes.stream().forEach(i->{ClientPolicyLogger.log(logger, " matched scope = " + i);});
+                if (logger.isTraceEnabled()) {
+                    explicitSpecifiedScopes.stream().forEach(i->ClientPolicyLogger.logv(logger, "{0} :: matched scope = {1}", logMsgPrefix(), i));
+                }
                 return true;
             }
         }
@@ -115,9 +150,9 @@ public class ClientScopesCondition implements ClientPolicyConditionProvider {
     }
 
     private Set<String> getScopesForMatching() {
-        if (componentModel.getConfig() == null) return null;
-        List<String> scopes = componentModel.getConfig().get(ClientScopesConditionFactory.SCOPES);
+        List<String> scopes = configuration.getScope();
         if (scopes == null) return null;
         return new HashSet<>(scopes);
     }
+
 }

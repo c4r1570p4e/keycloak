@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Red Hat, Inc. and/or its affiliates
+ * Copyright 2021 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.keycloak.Config.Scope;
-import org.keycloak.component.ComponentModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.provider.ProviderConfigProperty;
@@ -41,8 +40,8 @@ public class ClientUpdateSourceGroupsConditionFactory implements ClientPolicyCon
     }
 
     @Override
-    public ClientPolicyConditionProvider create(KeycloakSession session, ComponentModel model) {
-        return new ClientUpdateSourceGroupsCondition(session, model);
+    public ClientPolicyConditionProvider create(KeycloakSession session) {
+        return new ClientUpdateSourceGroupsCondition(session);
     }
 
     @Override

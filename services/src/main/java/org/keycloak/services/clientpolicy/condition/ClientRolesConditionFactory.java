@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Red Hat, Inc. and/or its affiliates
+ * Copyright 2021 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.keycloak.Config.Scope;
-import org.keycloak.component.ComponentModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.provider.ProviderConfigProperty;
@@ -29,6 +28,7 @@ import org.keycloak.provider.ProviderConfigProperty;
 public class ClientRolesConditionFactory implements ClientPolicyConditionProviderFactory {
 
     public static final String PROVIDER_ID = "clientroles-condition";
+
     public static final String ROLES = "roles";
 
     private static final List<ProviderConfigProperty> configProperties = new ArrayList<ProviderConfigProperty>();
@@ -40,9 +40,8 @@ public class ClientRolesConditionFactory implements ClientPolicyConditionProvide
     }
 
     @Override
-    public ClientPolicyConditionProvider create(KeycloakSession session, ComponentModel model) {
-        return new ClientRolesCondition(session, model);
-
+    public ClientPolicyConditionProvider create(KeycloakSession session) {
+        return new ClientRolesCondition(session);
     }
 
     @Override
