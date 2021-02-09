@@ -23,6 +23,7 @@ import org.keycloak.models.KeycloakSession;
 
 /**
  * @author Emilien Bondu
+ * @author Yang Xie
  */
 public class AppleIdentityProviderFactory extends AbstractIdentityProviderFactory<AppleIdentityProvider> implements SocialIdentityProviderFactory<AppleIdentityProvider> {
 

@@ -17,252 +17,133 @@
 
 package org.keycloak.social.apple;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang.StringUtils;
 import org.jboss.logging.Logger;
 import org.keycloak.OAuth2Constants;
-import org.keycloak.OAuthErrorException;
 import org.keycloak.broker.oidc.OIDCIdentityProvider;
 import org.keycloak.broker.oidc.OIDCIdentityProviderConfig;
-import org.keycloak.broker.oidc.mappers.AbstractJsonUserAttributeMapper;
 import org.keycloak.broker.provider.BrokeredIdentityContext;
-import org.keycloak.broker.provider.util.SimpleHttp;
+import org.keycloak.broker.provider.IdentityBrokerException;
 import org.keycloak.broker.social.SocialIdentityProvider;
-import org.keycloak.common.ClientConnection;
-import org.keycloak.common.util.Time;
+import org.keycloak.common.util.PemUtils;
 import org.keycloak.crypto.KeyWrapper;
 import org.keycloak.crypto.ServerECDSASignatureSignerContext;
-import org.keycloak.events.Errors;
 import org.keycloak.events.EventBuilder;
-import org.keycloak.events.EventType;
 import org.keycloak.jose.jws.JWSBuilder;
 import org.keycloak.jose.jws.JWSInput;
-import org.keycloak.jose.jws.JWSInputException;
-import org.keycloak.models.KeycloakContext;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
-import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.representations.JsonWebToken;
-import org.keycloak.services.ErrorPage;
-import org.keycloak.services.Urls;
-import org.keycloak.services.messages.Messages;
-
 import javax.ws.rs.FormParam;
 import javax.ws.rs.POST;
-import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.spec.PKCS8EncodedKeySpec;
-import java.util.Base64;
 
 /**
  * @author Emilien Bondu
+ * @author Yang Xie
  */
 public class AppleIdentityProvider extends OIDCIdentityProvider implements SocialIdentityProvider<OIDCIdentityProviderConfig> {
-
-    private static final String OAUTH2_PARAMETER_CODE = "code";
-
-    private static final String OAUTH2_PARAMETER_STATE = "state";
-
-    private static final String OAUTH2_PARAMETER_USER = "user";
-
-    public static final String ACCESS_DENIED = "access_denied";
-
-    protected static ObjectMapper mapper = new ObjectMapper();
+    protected static final Logger logger = Logger.getLogger(AppleIdentityProvider.class);
 
     public static final String AUTH_URL = "https://appleid.apple.com/auth/authorize?response_mode=form_post";
-
     public static final String TOKEN_URL = "https://appleid.apple.com/auth/token";
-
     public static final String ISSUER = "https://appleid.apple.com";
-
-    public static final String JWKS_URL = "https://appleid.apple.com/auth/keys";
-
-    public static final String EMAIL_SCOPE = "email";
-
-    public static final String NAME_SCOPE = "name";
-
-    protected static final Logger logger = Logger.getLogger(AppleIdentityProvider.class);
+    public static final String DEFAULT_SCOPE = SCOPE_OPENID + " name email";
+    protected static String userData;
+    
+    private static final String OIDC_PARAMETER_USER = "user";
 
     public AppleIdentityProvider(KeycloakSession session, AppleIdentityProviderConfig config) {
         super(session, config);
 
         config.setAuthorizationUrl(AUTH_URL);
         config.setTokenUrl(TOKEN_URL);
-        config.setClientAuthMethod(OIDCLoginProtocol.CLIENT_SECRET_POST);
-        config.setIssuer(ISSUER);
-        config.setUseJwksUrl(true);
-        config.setValidateSignature(true);
-        config.setJwksUrl(JWKS_URL);
-        String defaultScope = config.getDefaultScope();
-
+        logger.infof(config.getKey());
+        logger.infof(config.getKeyId());
+        logger.infof(config.getTeamId());
         if (!isValidSecret(config.getClientSecret())) {
-            config.setClientSecret(generateJWS(
-                    config.getP8Content(),
-                    config.getKeyId(),
-                    config.getTeamId())
-            );
-        }
-
-        if (defaultScope ==  null || defaultScope.trim().equals("")) {
-            config.setDefaultScope("openid"+ " " + NAME_SCOPE+ " " + EMAIL_SCOPE);
+            config.setClientSecret(generateClientSecret(config.getKey(), config.getKeyId(), config.getTeamId()));
         }
     }
 
     @Override
     public Object callback(RealmModel realm, AuthenticationCallback callback, EventBuilder event) {
-        return new Endpoint(realm, callback, event);
+        return new OIDCEndpoint(callback, realm, event);
     }
 
     @Override
     protected String getDefaultScopes() {
-        return "openid"+ " " + NAME_SCOPE+ " " + EMAIL_SCOPE;
+        return DEFAULT_SCOPE;
     }
 
-    protected class Endpoint {
-        protected RealmModel realm;
-
-        protected AuthenticationCallback callback;
-
-        protected EventBuilder event;
-
-        @Context
-        protected KeycloakSession session;
-
-        @Context
-        protected ClientConnection clientConnection;
-
-        @Context
-        protected HttpHeaders headers;
-
-        public Endpoint(RealmModel realm, AuthenticationCallback callback, EventBuilder event) {
-            this.realm = realm;
-            this.callback = callback;
-            this.event = event;
+    protected class OIDCEndpoint extends OIDCIdentityProvider.OIDCEndpoint {
+        public OIDCEndpoint(AuthenticationCallback callback, RealmModel realm, EventBuilder event) {
+            super(callback, realm, event);
         }
 
         @POST
-        public Response authResponse(@FormParam(AppleIdentityProvider.OAUTH2_PARAMETER_STATE) String state,
-                                     @FormParam(AppleIdentityProvider.OAUTH2_PARAMETER_CODE) String authorizationCode,
-                                     @FormParam(AppleIdentityProvider.OAUTH2_PARAMETER_USER) String user,
-                                     @FormParam(OAuth2Constants.ERROR) String error) {
-            if (error != null) {
-                logger.error(error + " for broker login " + getConfig().getProviderId());
-                if (error.equals(ACCESS_DENIED)) {
-                    return callback.cancelled(state);
-                } else if (error.equals(OAuthErrorException.LOGIN_REQUIRED) || error.equals(OAuthErrorException.INTERACTION_REQUIRED)) {
-                    return callback.error(state, error);
-                } else {
-                    return callback.error(state, Messages.IDENTITY_PROVIDER_UNEXPECTED_ERROR);
-                }
-            }
-
-            try {
-                if (authorizationCode != null) {
-
-                    String response = generateTokenRequest(authorizationCode).asString();
-
-                    BrokeredIdentityContext federatedIdentity = getFederatedIdentity(user, response);
-                    federatedIdentity.setIdpConfig(getConfig());
-                    federatedIdentity.setIdp(AppleIdentityProvider.this);
-                    federatedIdentity.setCode(state);
-                    return callback.authenticated(federatedIdentity);
-                }
-            } catch (WebApplicationException e) {
-                return e.getResponse();
-            } catch (Exception e) {
-                logger.error("Failed to make identity provider oauth callback", e);
-            }
-            event.event(EventType.LOGIN);
-            event.error(Errors.IDENTITY_PROVIDER_LOGIN_FAILURE);
-            return ErrorPage.error(session, null, Response.Status.BAD_GATEWAY, Messages.IDENTITY_PROVIDER_UNEXPECTED_ERROR);
-        }
-
-        public BrokeredIdentityContext getFederatedIdentity(String userData, String response) throws JsonProcessingException {
-            BrokeredIdentityContext user = AppleIdentityProvider.this.getFederatedIdentity(response);
-
-            if (userData != null) {
-                JsonNode profile = mapper.readTree(userData);
-
-                JsonNode email = profile.get("email");
-                if(email != null) {
-                    user.setEmail(email.asText());
-                }
-
-                JsonNode nameNode = profile.get("name");
-                if (nameNode != null) {
-                    JsonNode firstNameNode = nameNode.get("firstName");
-                    if (firstNameNode != null) {
-                        user.setFirstName(firstNameNode.asText());
-                    }
-                    JsonNode lastNameNode = nameNode.get("lastName");
-                    if (lastNameNode != null) {
-                        user.setLastName(lastNameNode.asText());
-                    }
-                    if (firstNameNode != null && lastNameNode != null) {
-                        user.setUsername(firstNameNode.asText() + " " + lastNameNode.asText());
-                    }
-                }
-
-                AbstractJsonUserAttributeMapper.storeUserProfileForMapper(user, profile, getConfig().getAlias());
-            }
-
-            return user;
-        }
-
-        public SimpleHttp generateTokenRequest(String authorizationCode) {
-            KeycloakContext context = session.getContext();
-            SimpleHttp tokenRequest = SimpleHttp.doPost(getConfig().getTokenUrl(), session)
-                    .param(OAUTH2_PARAMETER_CODE, authorizationCode)
-                    .param(OAUTH2_PARAMETER_REDIRECT_URI, Urls.identityProviderAuthnResponse(context.getUri().getBaseUri(),
-                            getConfig().getAlias(), context.getRealm().getName()).toString())
-                    .param(OAUTH2_PARAMETER_GRANT_TYPE, OAUTH2_GRANT_TYPE_AUTHORIZATION_CODE);
-            return authenticateTokenRequest(tokenRequest);
+        public Response authResponse(@FormParam(OAUTH2_PARAMETER_STATE) String state,
+            @FormParam(OAUTH2_PARAMETER_CODE) String authorizationCode,
+            @FormParam(OIDC_PARAMETER_USER) String user,
+            @FormParam(OAuth2Constants.ERROR) String error) {
+            userData = user;
+            return super.authResponse(state, authorizationCode, error);
         }
     }
 
-    private String generateJWS(String p8Content, String keyId, String teamId) {
+    @Override
+    public BrokeredIdentityContext getFederatedIdentity(String response) {
+        BrokeredIdentityContext user = super.getFederatedIdentity(response);
+        if (userData != null) {
+            try {
+                JsonNode userNode = asJsonNode(userData);
+                if (userNode.has("email")) {
+                    user.setEmail(getJsonProperty(userNode, "email"));
+                }
+                if (userNode.has("name")) {
+                    JsonNode nameNode = userNode.get("name");
+                    user.setFirstName(getJsonProperty(nameNode, "firstName"));
+                    user.setLastName(getJsonProperty(nameNode, "lastName"));
+                }
+            } catch (Exception e) {
+                throw new IdentityBrokerException("Failed to parse responded user data.", e);
+            }
+        }
+        return user;
+    }
+
+    private String generateClientSecret(String pem, String keyId, String teamId) {
         try {
-            KeyFactory kf = KeyFactory.getInstance("ECDSA");
-            PKCS8EncodedKeySpec keySpecPKCS8 = new PKCS8EncodedKeySpec(
-                    Base64.getDecoder().decode(
-                            p8Content
-                                    .replaceAll("-----BEGIN PRIVATE KEY-----", "")
-                                    .replaceAll("-----END PRIVATE KEY-----", "")
-                                    .replaceAll("\\n", "")
-                                    .replaceAll(" ", "")
-                    ));
-            PrivateKey privateKey = kf.generatePrivate(keySpecPKCS8);
             KeyWrapper keyWrapper = new KeyWrapper();
             keyWrapper.setAlgorithm("ES256");
-            keyWrapper.setPrivateKey(privateKey);
-
-            return new JWSBuilder()
-                    .kid(keyId)
-                    .jsonContent(generateClientToken(teamId))
-                    .sign(new ServerECDSASignatureSignerContext(keyWrapper));
+            keyWrapper.setPrivateKey(getPrivateKey(pem));
+            return new JWSBuilder().kid(keyId).jsonContent(generateClientToken(teamId))
+                .sign(new ServerECDSASignatureSignerContext(keyWrapper));
         } catch (Exception e) {
-            logger.error("Unable to generate JWS");
+            throw new IdentityBrokerException("Failed to generate client secret.", e);
         }
-        return null;
+    }
+    
+    private PrivateKey getPrivateKey(String pem) throws Exception {
+        KeyFactory kf = KeyFactory.getInstance("ECDSA");
+        byte[] der = PemUtils.pemToDer(pem);
+        PKCS8EncodedKeySpec keySpecPKCS8 = new PKCS8EncodedKeySpec(der);
+        return kf.generatePrivate(keySpecPKCS8);
     }
 
     private boolean isValidSecret(String clientSecret) {
-        if (clientSecret != null  && clientSecret.length() > 0) {
-            try {
-                JWSInput jws = new JWSInput(clientSecret);
-                JsonWebToken token = jws.readJsonContent(JsonWebToken.class);
-                return !token.isExpired();
-            } catch (JWSInputException e) {
-                logger.debug("Secret is not a valid JWS");
-            }
+        if (clientSecret == null || clientSecret.isEmpty())
+            return false;
+        try {
+            JWSInput jws = new JWSInput(clientSecret);
+            JsonWebToken token = jws.readJsonContent(JsonWebToken.class);
+            return !token.isExpired();
+        } catch (Exception e) {
+            throw new IdentityBrokerException("Client secret is invalid.", e);
         }
-        return false;
     }
 
     private JsonWebToken generateClientToken(String teamId) {
@@ -270,8 +151,8 @@ public class AppleIdentityProvider extends OIDCIdentityProvider implements Socia
         jwt.issuer(teamId);
         jwt.subject(getConfig().getClientId());
         jwt.audience(ISSUER);
-        jwt.expiration(Time.currentTime() + 86400*180);
         jwt.issuedNow();
+        jwt.exp(jwt.getIat() + 30 * 60);
         return jwt;
     }
 }

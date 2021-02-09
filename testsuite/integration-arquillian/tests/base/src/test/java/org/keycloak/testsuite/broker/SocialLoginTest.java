@@ -34,7 +34,20 @@ import org.keycloak.testsuite.arquillian.annotation.DisableFeature;
 import org.keycloak.testsuite.arquillian.annotation.UncaughtServerErrorExpected;
 import org.keycloak.testsuite.auth.page.login.UpdateAccount;
 import org.keycloak.testsuite.pages.LoginPage;
-import org.keycloak.testsuite.pages.social.*;
+import org.keycloak.testsuite.pages.social.AbstractSocialLoginPage;
+import org.keycloak.testsuite.pages.social.AppleLoginPage;
+import org.keycloak.testsuite.pages.social.BitbucketLoginPage;
+import org.keycloak.testsuite.pages.social.FacebookLoginPage;
+import org.keycloak.testsuite.pages.social.GitHubLoginPage;
+import org.keycloak.testsuite.pages.social.GitLabLoginPage;
+import org.keycloak.testsuite.pages.social.GoogleLoginPage;
+import org.keycloak.testsuite.pages.social.InstagramLoginPage;
+import org.keycloak.testsuite.pages.social.LinkedInLoginPage;
+import org.keycloak.testsuite.pages.social.MicrosoftLoginPage;
+import org.keycloak.testsuite.pages.social.OpenShiftLoginPage;
+import org.keycloak.testsuite.pages.social.PayPalLoginPage;
+import org.keycloak.testsuite.pages.social.StackOverflowLoginPage;
+import org.keycloak.testsuite.pages.social.TwitterLoginPage;
 import org.keycloak.testsuite.util.IdentityProviderBuilder;
 import org.keycloak.testsuite.util.OAuthClient;
 import org.keycloak.testsuite.util.RealmBuilder;
@@ -62,6 +75,7 @@ import org.keycloak.testsuite.arquillian.annotation.AuthServerContainerExclude;
 import org.keycloak.testsuite.arquillian.annotation.AuthServerContainerExclude.AuthServer;
 
 import org.keycloak.testsuite.util.AdminClientUtil;
+import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.APPLE;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.BITBUCKET;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.FACEBOOK;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.FACEBOOK_INCLUDE_BIRTHDAY;
@@ -79,7 +93,6 @@ import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.OPENSHIFT4;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.PAYPAL;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.STACKOVERFLOW;
 import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.TWITTER;
-import static org.keycloak.testsuite.broker.SocialLoginTest.Provider.APPLE;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -281,6 +294,15 @@ public class SocialLoginTest extends AbstractKeycloakTest {
         assertEquals("Unexpected error when authenticating with identity provider", errorMessage.getText());
     }
 
+    @Test
+    @UncaughtServerErrorExpected
+    public void appleLogin() throws InterruptedException {
+        setTestProvider(APPLE);
+        performLogin();
+        assertAccount();
+        testTokenExchange();
+    }
+    
     @Test
     @UncaughtServerErrorExpected
     public void bitbucketLogin() throws InterruptedException {
