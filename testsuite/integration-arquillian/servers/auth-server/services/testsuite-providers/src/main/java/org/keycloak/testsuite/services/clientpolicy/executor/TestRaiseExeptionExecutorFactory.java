@@ -66,7 +66,7 @@ public class TestRaiseExeptionExecutorFactory implements ClientPolicyExecutorPro
 
     @Override
     public List<ProviderConfigProperty> getConfigProperties() {
-        return new ArrayList<>(Arrays.asList(TARGET_CP_EVENTS_PROPERTY));
+        return Arrays.asList(TARGET_CP_EVENTS_PROPERTY);
     }
 
 }

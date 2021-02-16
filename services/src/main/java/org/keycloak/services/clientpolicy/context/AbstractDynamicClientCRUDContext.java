@@ -31,13 +31,14 @@ abstract class AbstractDynamicClientCRUDContext implements ClientCRUDContext {
 
     public AbstractDynamicClientCRUDContext(KeycloakSession session, JsonWebToken token, RealmModel realm) {
         this.token = token;
-        if (token != null) {
-            if (token.getIssuedFor() != null) {
-                this.authenticatedClient = realm.getClientByClientId(token.getIssuedFor());
-            }
-            if (token.getSubject() != null) {
-                this.authenticatedUser = session.users().getUserById(token.getSubject(), realm);
-            }
+        if (token == null) {
+            return;
+        }
+        if (token.getIssuedFor() != null) {
+            this.authenticatedClient = realm.getClientByClientId(token.getIssuedFor());
+        }
+        if (token.getSubject() != null) {
+            this.authenticatedUser = session.users().getUserById(token.getSubject(), realm);
         }
     }
 

@@ -490,17 +490,19 @@ public abstract class AbstractClientPoliciesTest extends AbstractKeycloakTest {
 
     private void processClientPolicyExceptionByAdmin(BadRequestException bre) throws ClientPolicyException {
         Response resp = bre.getResponse();
-        if (resp.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            String respBody = resp.readEntity(String.class);
-            Map<String, String> responseJson = null;
-            try {
-                responseJson = JsonSerialization.readValue(respBody, Map.class);
-            } catch (IOException e) {
-                fail();
-            }
-            throw new ClientPolicyException(responseJson.get(OAuth2Constants.ERROR), responseJson.get(OAuth2Constants.ERROR_DESCRIPTION));
+        if (resp.getStatus() != Response.Status.BAD_REQUEST.getStatusCode()) {
+            resp.close();
+            return;
         }
-        resp.close();
+
+        String respBody = resp.readEntity(String.class);
+        Map<String, String> responseJson = null;
+        try {
+            responseJson = JsonSerialization.readValue(respBody, Map.class);
+        } catch (IOException e) {
+            fail();
+        }
+        throw new ClientPolicyException(responseJson.get(OAuth2Constants.ERROR), responseJson.get(OAuth2Constants.ERROR_DESCRIPTION));
     }
 
     // Registration/Initial Access Token acquisition for Dynamic Client Registration

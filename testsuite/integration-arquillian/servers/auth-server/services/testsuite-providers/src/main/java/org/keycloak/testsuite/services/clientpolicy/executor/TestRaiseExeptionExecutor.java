@@ -58,7 +58,6 @@ public class TestRaiseExeptionExecutor implements ClientPolicyExecutorProvider {
     private boolean isThrowExceptionNeeded(ClientPolicyEvent event) {
         ClientPolicyLogger.log(logger, "Client Policy Trigger Event = " + event);
         List<String> l = componentModel.getConfig().get(TestRaiseExeptionExecutorFactory.TARGET_CP_EVENTS);
-        if (l != null && l.stream().anyMatch(i->i.equals(event.toString()))) return true;
-        return false;
+        return l != null && l.stream().anyMatch(i->i.equals(event.toString()));
     }
 }
